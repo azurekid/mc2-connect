@@ -23,32 +23,32 @@
 
 ```mermaid
 flowchart LR
-    subgraph Phase1["🔍 Phase 1: Anonymous<br/>(5 min)"]
+    subgraph Phase1["Phase 1: Anonymous<br/>(5 min)"]
         A1[Find-SubDomain]
         A2[Find-PublicStorageContainer]
         A3[Read-SASToken]
     end
 
-    subgraph Phase2["📦 Phase 2: Storage<br/>(10 min)"]
+    subgraph Phase2["Phase 2: Storage<br/>(10 min)"]
         B1[Enumerate Directories]
         B2[Download Config]
         B3[Extract Credentials]
     end
 
-    subgraph Phase3["🔎 Phase 3: Azure Recon<br/>(10 min)"]
+    subgraph Phase3["Phase 3: Azure Recon<br/>(10 min)"]
         C1[Connect-ServicePrincipal]
         C2[Get-RoleAssignment]
         C3[Get-ManagedIdentity]
         C4[Get-ServicePrincipalsPermission]
     end
 
-    subgraph Phase4["⚡ Phase 4: UAMI<br/>(15 min)"]
+    subgraph Phase4["Phase 4: UAMI<br/>(15 min)"]
         D1[Set-FederatedIdentity]
         D2[GitHub OIDC Token]
         D3[Exchange for UAMI Token]
     end
 
-    subgraph Phase5["👑 Phase 5: Takeover<br/>(5 min)"]
+    subgraph Phase5["Phase 5: Takeover<br/>(5 min)"]
         E1[Add-EntraApplication]
         E2[Global Admin!]
     end
@@ -66,15 +66,15 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[👤 Anonymous Attacker] -->|DNS Enumeration| B[🌐 Storage Account Discovered]
-    B -->|SAS Token Abuse| C[📄 Config File Downloaded]
-    C -->|Extract Credentials| D[🔑 App Secret Obtained]
-    D -->|Connect-ServicePrincipal| E[🔓 Authenticated to Azure]
+    A[👤 Anonymous Attacker] -->|DNS Enumeration| B[Storage Account Discovered]
+    B -->|SAS Token Abuse| C[Config File Downloaded]
+    C -->|Extract Credentials| D[App Secret Obtained]
+    D -->|Connect-ServicePrincipal| E[Authenticated to Azure]
     E -->|Get-ManagedIdentity| F[🎯 UAMI Discovered]
-    F -->|Get-ServicePrincipalsPermission| G[⚠️ Application.ReadWrite.All Found]
-    G -->|Set-FederatedIdentity| H[🔗 GitHub OIDC Trust Added]
-    H -->|Token Exchange| I[🎫 UAMI Token Obtained]
-    I -->|Add-EntraApplication| J[👑 Global Admin Achieved]
+    F -->|Get-ServicePrincipalsPermission| G[Application.ReadWrite.All Found]
+    G -->|Set-FederatedIdentity| H[GitHub OIDC Trust Added]
+    H -->|Token Exchange| I[UAMI Token Obtained]
+    I -->|Add-EntraApplication| J[Global Admin Achieved]
 
     style A fill:#e3f2fd
     style J fill:#ffcdd2
@@ -212,7 +212,7 @@ Read-SASToken -SASToken $sasToken
 
 ---
 
-## 🔓 PHASE 2: Storage Access & Credential Extraction (10 minutes)
+## PHASE 2: Storage Access & Credential Extraction (10 minutes)
 
 ### Attacker Actions
 
@@ -268,7 +268,7 @@ Write-Host "Found credentials for App: $clientId in tenant: $tenantId"
 
 ---
 
-## 🔍 PHASE 3: Authenticated Azure Reconnaissance (10 minutes)
+## PHASE 3: Authenticated Azure Reconnaissance (10 minutes)
 
 **This is the critical discovery phase using BlackCat functions!**
 
@@ -377,26 +377,26 @@ $existingFics = Invoke-RestMethod -Uri $ficUrl -Headers $script:authHeader
 
 ---
 
-## ⚡ PHASE 4: UAMI Exploitation via Federated Credentials (15 minutes)
+## PHASE 4: UAMI Exploitation via Federated Credentials (15 minutes)
 
 ### Understanding the Attack Chain
 
 ```mermaid
 flowchart TD
-    A[🐙 Attacker's GitHub Repository] -->|1. Workflow triggers| B[📜 GitHub OIDC Token]
+    A[Attacker's GitHub Repository] -->|1. Workflow triggers| B[GitHub OIDC Token]
     
-    subgraph Azure["☁️ Azure / Entra ID"]
-        C[🔐 UAMI with FIC]
-        D[🎫 UAMI Access Token]
-        E[📊 Microsoft Graph API]
+    subgraph Azure["Azure / Entra ID"]
+        C[UAMI with FIC]
+        D[UAMI Access Token]
+        E[Microsoft Graph API]
     end
     
     B -->|2. Token Exchange| C
     C -->|3. Issues token with| D
     D -->|4. Has Application.ReadWrite.All| E
-    E -->|5. Create App + Global Admin| F[👑 Tenant Takeover]
+    E -->|5. Create App + Global Admin| F[Tenant Takeover]
 
-    subgraph Prerequisite["⚙️ Prerequisite: Add FIC to UAMI"]
+    subgraph Prerequisite["Prerequisite: Add FIC to UAMI"]
         P1[SP with Contributor] -->|Set-FederatedIdentity| P2[Trust attacker's repo]
     end
 
@@ -412,13 +412,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph AzureRBAC["🔷 Azure RBAC Boundary"]
+    subgraph AzureRBAC["Azure RBAC Boundary"]
         AR1[Contributor Role]
         AR2[Modify UAMI Resource]
         AR3[Add Federated Credential]
     end
 
-    subgraph EntraID["🔶 Entra ID Boundary"]
+    subgraph EntraID["Entra ID Boundary"]
         EI1[UAMI Service Principal]
         EI2[Application.ReadWrite.All]
         EI3[Create App Registrations]
@@ -510,7 +510,7 @@ jobs:
 
 ---
 
-## 👑 PHASE 5: Tenant Takeover (5 minutes)
+## PHASE 5: Tenant Takeover (5 minutes)
 
 ### Using BlackCat's Add-EntraApplication
 
@@ -593,10 +593,10 @@ $secret = Invoke-RestMethod `
 
 | Detection | Log Source | Alert Priority |
 |-----------|------------|----------------|
-| New App Registration | Entra ID Audit Logs | 🔴 Critical |
-| Global Admin role assignment | Entra ID Audit Logs | 🔴 Critical |
-| Service principal sign-in from new app | Entra ID Sign-in Logs | 🟡 High |
-| Client secret added to application | Entra ID Audit Logs | 🟡 High |
+| New App Registration | Entra ID Audit Logs | Critical |
+| Global Admin role assignment | Entra ID Audit Logs | Critical |
+| Service principal sign-in from new app | Entra ID Sign-in Logs | High |
+| Client secret added to application | Entra ID Audit Logs | High |
 
 ---
 
@@ -604,7 +604,7 @@ $secret = Invoke-RestMethod `
 
 ```mermaid
 flowchart TD
-    subgraph Prevention["🛡️ Prevention Layer"]
+    subgraph Prevention["Prevention Layer"]
         P1[No List-enabled SAS Tokens]
         P2[Private Endpoints for Storage]
         P3[Credential Scanning in CI/CD]
@@ -612,7 +612,7 @@ flowchart TD
         P5[Azure Policy: Block FIC creation]
     end
     
-    subgraph Detection["🔍 Detection Layer"]
+    subgraph Detection["Detection Layer"]
         D1[Storage Analytics Logs]
         D2[Azure Activity Logs]
         D3[Entra ID Audit Logs]
@@ -620,7 +620,7 @@ flowchart TD
         D5[Microsoft Sentinel Rules]
     end
     
-    subgraph Response["⚡ Response Layer"]
+    subgraph Response["Response Layer"]
         R1[Revoke SAS Tokens]
         R2[Rotate Storage Keys]
         R3[Delete Malicious Apps]
@@ -693,7 +693,7 @@ AuditLogs
 
 ---
 
-## 🎯 Key Takeaways
+## Key Takeaways
 
 ### For Blue Teams
 
@@ -722,7 +722,7 @@ AuditLogs
 
 ---
 
-## 📋 BlackCat Functions Used
+## BlackCat Functions Used
 
 | Phase | Function | Purpose |
 |-------|----------|---------|
@@ -739,7 +739,7 @@ AuditLogs
 
 ---
 
-## 📋 Exercise Materials
+## Exercise Materials
 
 | File | Purpose |
 |------|---------|
@@ -750,7 +750,7 @@ AuditLogs
 
 ---
 
-## 🏁 Flags
+## Flags
 
 Participants should capture these flags during the exercise:
 
