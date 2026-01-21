@@ -97,7 +97,7 @@ flowchart TD
 
 ---
 
-## 🏢 Scenario Background
+## Scenario Background
 
 ### Company Profile: Blue Mountain Travel Ltd.
 
@@ -600,7 +600,7 @@ $secret = Invoke-RestMethod `
 
 ---
 
-## 🛡️ DEFENSES & DETECTIONS (Summary)
+## DEFENSES & DETECTIONS (Summary)
 
 ```mermaid
 flowchart TD
