@@ -19,7 +19,7 @@
 
 ---
 
-## 🗺️ Attack Flow Diagram
+## Attack Flow Diagram
 
 ```mermaid
 flowchart LR
@@ -70,7 +70,7 @@ flowchart TD
     B -->|SAS Token Abuse| C[Config File Downloaded]
     C -->|Extract Credentials| D[App Secret Obtained]
     D -->|Connect-ServicePrincipal| E[Authenticated to Azure]
-    E -->|Get-ManagedIdentity| F[🎯 UAMI Discovered]
+    E -->|Get-ManagedIdentity| F[UAMI Discovered]
     F -->|Get-ServicePrincipalsPermission| G[Application.ReadWrite.All Found]
     G -->|Set-FederatedIdentity| H[GitHub OIDC Trust Added]
     H -->|Token Exchange| I[UAMI Token Obtained]
@@ -139,7 +139,7 @@ timeline
 
 ---
 
-## 📁 Exposed Configuration File
+## Exposed Configuration File
 
 ### File Location in Storage Account
 
@@ -172,7 +172,7 @@ bluemountaintravelsa (Storage Account)
 
 ---
 
-## 🎭 PHASE 1: Anonymous Reconnaissance (5 minutes)
+## PHASE 1: Anonymous Reconnaissance (5 minutes)
 
 ### Attacker Actions
 
