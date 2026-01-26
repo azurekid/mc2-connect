@@ -160,9 +160,9 @@ timeline
 
 | Permission | Justification Given | Actual Need | Real Risk |
 |------------|---------------------|-------------|----------|
-| `User.ReadWrite.All` | "Create new employee accounts" | ✅ Legitimate | Medium |
-| `Group.ReadWrite.All` | "Add employees to department groups" | ✅ Legitimate | Medium |
-| `AppRoleAssignment.ReadWrite.All` | "Assign new employees to Salesforce, ServiceNow, etc." | ✅ Sounds legitimate | **CRITICAL** |
+| `User.ReadWrite.All` | "Create new employee accounts" | Legitimate | Medium |
+| `Group.ReadWrite.All` | "Add employees to department groups" | Legitimate | Medium |
+| `AppRoleAssignment.ReadWrite.All` | "Assign new employees to Salesforce, ServiceNow, etc." | Sounds legitimate | **CRITICAL** |
 
 **Why `AppRoleAssignment.ReadWrite.All` is so dangerous:**
 
@@ -652,13 +652,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph AzureRBAC["🔷 Azure RBAC Boundary"]
+    subgraph AzureRBAC["Azure RBAC Boundary"]
         AR1[Contributor Role]
         AR2[Modify UAMI Resource]
         AR3[Add Federated Credential]
     end
 
-    subgraph EntraID["🔶 Entra ID Boundary"]
+    subgraph EntraID["Entra ID Boundary"]
         EI1[UAMI Service Principal]
         EI2[AppRoleAssignment.ReadWrite.All]
         EI3[Set-ManagedIdentityPermission]
