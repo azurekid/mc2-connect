@@ -515,7 +515,7 @@ flowchart TD
 $params = @{
     ServicePrincipalId = "12b684d1-68be-4dc9-90c2-0ab270402124"
     TenantId = "3da86d62-c862-48da-973f-487ab98166a8"
-    ClientSecret = "eOD8Q~YoI1~hshRyyUJ9x1kNWAAD1csMl.4pvcY"
+    ClientSecret = "3zp8Q~uo_nPsTYu1nOqHI8_UklGucP4a3Z3zuasp"
     SubscriptionId = "cc826ab7-e046-4422-8e68-ba57b6d48165"
 }
 
