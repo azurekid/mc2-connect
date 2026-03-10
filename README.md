@@ -704,6 +704,12 @@ flowchart LR
 
 $uamiId = "/subscriptions/a1b2c3d4-e5f6-7890-abcd-ef1234567890/resourceGroups/rg-hr-infrastructure/providers/Microsoft.ManagedIdentity/userAssignedIdentities/uami-hr-cicd-automation"
 
+Invoke-FederatedTokenExchange `
+    -Name uami-hr-cicd-automation `
+    -IssuerUrl 'https://blackcatoidc.blob.core.windows.net/oidc' `
+    -Cleanup
+    
+
 Set-FederatedIdentity `
     -ManagedIdentityName "uami-hr-cicd-automation" `
     -Name "github-backup-automation" `
